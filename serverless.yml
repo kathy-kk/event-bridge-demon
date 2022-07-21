@@ -1,28 +1,70 @@
 service: delivery-app-eventbridge-demo
-frameworkVersion: '2'
+frameworkVersion: '3'
+plugins:
+  - serverless-iam-roles-per-function
+  - serverless-pseudo-parameters
+
+  
 
 provider:
   name: aws
   runtime: nodejs12.x
-  region: ap-southeast-1
+  region: ap-southeast-2
+  accountId: '#{AWS::AccountId}'
+  stage: ${opt:stage, 'dev'}
   iamRoleStatements:
     - Effect: Allow
       Action:
         - events:DescribeEventBus
         - events:PutEvents
-      Resource: arn:aws:events:ap-southeast-1:*:*
+      Resource: arn:aws:events:ap-southeast-2:*:*
+
+
+custom:
+  stackName: ${self:service}-${self:provider.stage}
 
 functions:
-  customerSupport:
+  CustomerSupportService:
+    name: ${self:custom.stackName}-CustomerSupport
     handler: handler.customerSupport
     events:
      - http:
         path: delivery-app-eventbridge-demo
         method: post
         cors: true
-  qualitySupportService:
+
+  QualitySupportService:
+    name: ${self:custom.stackName}-QualitySupportService
     handler: QualitySupportService.handler
-  logisticsSupportService:
+  LogisticsSupportService:
+    name: ${self:custom.stackName}-LogisticsSupportService
     handler: LogisticsSupportService.handler
-  techSupportService:
+  TechSupportService:
+    name: ${self:custom.stackName}-TechSupportService
     handler: TechSupportService.handler
+
+resources:
+  Resources:
+    qualitySupportInvokePermission:
+      Type: 'AWS::Lambda::Permission' 
+      DependsOn: QualitySupportServiceLambdaFunction
+      Properties:
+        FunctionName: ${self:custom.stackName}-QualitySupportService
+        Action: lambda:InvokeFunction
+        Principal: events.amazonaws.com
+
+    logisticsSupportInvokePermission:
+      Type: 'AWS::Lambda::Permission'
+      DependsOn: LogisticsSupportServiceLambdaFunction
+      Properties:
+        FunctionName: ${self:custom.stackName}-LogisticsSupportService
+        Action: lambda:InvokeFunction
+        Principal: events.amazonaws.com
+
+    techSupportInvokePermission:
+      Type: 'AWS::Lambda::Permission'
+      DependsOn: TechSupportServiceLambdaFunction
+      Properties:
+        FunctionName: ${self:custom.stackName}-TechSupportService
+        Action: lambda:InvokeFunction
+        Principal: events.amazonaws.com

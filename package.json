@@ -9,6 +9,10 @@
   "author": "AJ Catambay",
   "license": "ISC",
   "dependencies": {
-    "aws-sdk": "^2.906.0"
+    "aws-sdk": "^2.906.0",
+    "serverless-pseudo-parameters": "^2.6.1"
+  },
+  "devDependencies": {
+    "serverless-iam-roles-per-function": "^3.2.0"
   }
 }
