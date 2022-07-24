@@ -10,7 +10,7 @@ module.exports.customerSupport = (event, context, callback) => {
     Entries: [{
       Detail: event.body,
       DetailType: 'support',
-      EventBusName: 'FoodDeliveryAppEventBus',
+      EventBusName: process.env.EVENT_BUS_NAME,
       Source: 'handler.customerSupport',
       Time: new Date()
     }]

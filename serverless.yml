@@ -3,6 +3,7 @@ frameworkVersion: '3'
 plugins:
   - serverless-iam-roles-per-function
   - serverless-pseudo-parameters
+  - serverless-plugin-lambda-dead-letter
 
   
 
@@ -10,7 +11,6 @@ provider:
   name: aws
   runtime: nodejs12.x
   region: ap-southeast-2
-  accountId: '#{AWS::AccountId}'
   stage: ${opt:stage, 'dev'}
   iamRoleStatements:
     - Effect: Allow
@@ -22,11 +22,14 @@ provider:
 
 custom:
   stackName: ${self:service}-${self:provider.stage}
+  eventBusName: ${self:provider.stage}-FoodDeliveryAppEventBus
 
 functions:
   CustomerSupportService:
     name: ${self:custom.stackName}-CustomerSupport
     handler: handler.customerSupport
+    environment:
+      EVENT_BUS_NAME: ${self:custom.eventBusName}
     events:
      - http:
         path: delivery-app-eventbridge-demo
@@ -42,9 +45,76 @@ functions:
   TechSupportService:
     name: ${self:custom.stackName}-TechSupportService
     handler: TechSupportService.handler
+    role: sendErrorMessageToDeadLetterRole
+    deadLetter:
+      targetArn: 'arn:aws:sqs:ap-southeast-2:401214556774:deadLetterTest'
+
+        
 
 resources:
   Resources:
+    FoodDeliveryAppEventBus: 
+      Type: AWS::Events::EventBus
+      Properties: 
+          Name: ${self:custom.eventBusName}
+
+    SupportRequestsForFoodRule: 
+      Type: AWS::Events::Rule
+      DependsOn: 
+        - QualitySupportServiceLambdaFunction
+        - FoodDeliveryAppEventBus
+      Properties: 
+        Name: "SupportRequestsForFood"
+        EventBusName: ${self:custom.eventBusName}
+        EventPattern:
+          detail:
+            type: 
+             - food
+        State: "ENABLED"
+        Targets: 
+          - Arn: !GetAtt QualitySupportServiceLambdaFunction.Arn
+            Id: "FoodHandlerRule"
+            DeadLetterConfig:
+             Arn: 'arn:aws:sqs:ap-southeast-2:401214556774:deadLetterTest'
+
+    SupportRequestsForDeliveryRule: 
+      Type: AWS::Events::Rule
+      DependsOn: 
+        - LogisticsSupportServiceLambdaFunction
+        - FoodDeliveryAppEventBus
+      Properties: 
+        Name: "SupportRequestsForDelivery"
+        EventBusName: ${self:custom.eventBusName}
+        EventPattern: 
+          detail:
+            type: 
+             - delivery
+        State: "ENABLED"
+        Targets: 
+          - Arn: !GetAtt LogisticsSupportServiceLambdaFunction.Arn
+            Id: "DeliveryHandlerRule"
+            DeadLetterConfig:
+             Arn: 'arn:aws:sqs:ap-southeast-2:401214556774:deadLetterTest'
+  
+    SupportRequestsForAppRule: 
+      Type: AWS::Events::Rule
+      DependsOn: 
+        - TechSupportServiceLambdaFunction
+        - FoodDeliveryAppEventBus
+      Properties: 
+        Name: "SupportRequestsForApp"
+        EventBusName: ${self:custom.eventBusName}
+        EventPattern: 
+          detail:
+            type: 
+             - app
+        State: "ENABLED"
+        Targets: 
+          - Arn: !GetAtt TechSupportServiceLambdaFunction.Arn
+            Id: "AppHandlerRule"
+            DeadLetterConfig:
+             Arn: 'arn:aws:sqs:ap-southeast-2:401214556774:deadLetterTest'
+
     qualitySupportInvokePermission:
       Type: 'AWS::Lambda::Permission' 
       DependsOn: QualitySupportServiceLambdaFunction
@@ -68,3 +138,77 @@ resources:
         FunctionName: ${self:custom.stackName}-TechSupportService
         Action: lambda:InvokeFunction
         Principal: events.amazonaws.com
+    
+    sendErrorMessageToDeadLetterRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: sendSqs
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource:
+                    - '*'
+                - Effect: Allow
+                  Action:
+                    - "sqs:*"
+                  Resource: "*"
+    
+    EventInvokeConfig:
+      Type: AWS::Lambda::EventInvokeConfig
+      DependsOn: TechSupportServiceLambdaFunction
+      Properties:
+        FunctionName: ${self:custom.stackName}-TechSupportService
+        Qualifier: '$LATEST'
+        MaximumRetryAttempts: 0
+
+    DeadLetterQueuePolicy: 
+      Type: AWS::SQS::QueuePolicy
+      DependsOn: 
+        - SupportRequestsForAppRule
+        - SupportRequestsForDeliveryRule
+        - SupportRequestsForFoodRule
+      Properties: 
+        Queues: 
+          - 'https://sqs.ap-southeast-2.amazonaws.com/401214556774/deadLetterTest'
+        PolicyDocument: 
+          Statement: 
+            - Effect: Allow
+              Principal:
+                Service: events.amazonaws.com
+              Action: 'sqs:SendMessage'
+              Resource: 'arn:aws:sqs:ap-southeast-2:401214556774:deadLetterTest'
+              Condition: 
+                ArnEquals:
+                  aws:SourceArn: !GetAtt SupportRequestsForDeliveryRule.Arn
+            - Effect: Allow
+              Principal:
+                Service: events.amazonaws.com
+              Action: 'sqs:SendMessage'
+              Resource: 'arn:aws:sqs:ap-southeast-2:401214556774:deadLetterTest'
+              Condition: 
+                ArnEquals:
+                  aws:SourceArn: !GetAtt SupportRequestsForFoodRule.Arn
+                SupportRequestsForAppRuleDeadLetterQueuePermission:
+            - Effect: Allow
+              Principal:
+                Service: events.amazonaws.com
+              Action: 'sqs:SendMessage'
+              Resource: 'arn:aws:sqs:ap-southeast-2:401214556774:deadLetterTest'
+              Condition: 
+                ArnEquals:
+                  aws:SourceArn: !GetAtt SupportRequestsForAppRule.Arn
+
