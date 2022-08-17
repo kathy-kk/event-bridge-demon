@@ -187,28 +187,8 @@ resources:
         PolicyDocument: 
           Statement: 
             - Effect: Allow
-              Principal:
-                Service: events.amazonaws.com
               Action: 'sqs:SendMessage'
               Resource: 'arn:aws:sqs:ap-southeast-2:401214556774:deadLetterTest'
-              Condition: 
-                ArnEquals:
-                  aws:SourceArn: !GetAtt SupportRequestsForDeliveryRule.Arn
-            - Effect: Allow
               Principal:
                 Service: events.amazonaws.com
-              Action: 'sqs:SendMessage'
-              Resource: 'arn:aws:sqs:ap-southeast-2:401214556774:deadLetterTest'
-              Condition: 
-                ArnEquals:
-                  aws:SourceArn: !GetAtt SupportRequestsForFoodRule.Arn
-                SupportRequestsForAppRuleDeadLetterQueuePermission:
-            - Effect: Allow
-              Principal:
-                Service: events.amazonaws.com
-              Action: 'sqs:SendMessage'
-              Resource: 'arn:aws:sqs:ap-southeast-2:401214556774:deadLetterTest'
-              Condition: 
-                ArnEquals:
-                  aws:SourceArn: !GetAtt SupportRequestsForAppRule.Arn
-
+                
