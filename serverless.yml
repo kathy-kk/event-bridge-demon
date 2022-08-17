@@ -28,8 +28,11 @@ functions:
   CustomerSupportService:
     name: ${self:custom.stackName}-CustomerSupport
     handler: handler.customerSupport
+    deadLetter:
+      targetArn: 'arn:aws:sqs:ap-southeast-2:401214556774:deadLetterTest'
     environment:
       EVENT_BUS_NAME: ${self:custom.eventBusName}
+    role: CustomerSupportServiceRole
     events:
      - http:
         path: delivery-app-eventbridge-demo
@@ -191,4 +194,78 @@ resources:
               Resource: 'arn:aws:sqs:ap-southeast-2:401214556774:deadLetterTest'
               Principal:
                 Service: events.amazonaws.com
+
+
+    EventStore:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: EventStore
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+          - AttributeName: createdAt
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+
+    CustomerSupportServiceRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: accessDynamoDb
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:DescribeTable
+                    - dynamodb:Query
+                    - dynamodb:Scan
+                    - dynamodb:GetItem
+                    - dynamodb:PutItem
+                    - dynamodb:UpdateItem
+                    - dynamodb:DeleteItem
+                  Resource:
+                    - "Fn::GetAtt": [EventStore, Arn]
+          - PolicyName: putEvent
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - events:PutEvents
+                  Resource:
+                    - '*'
+          - PolicyName: sendSqs
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource:
+                    - '*'
+                - Effect: Allow
+                  Action:
+                    - "sqs:*"
+                  Resource: "*"
+          
+
+  
                 

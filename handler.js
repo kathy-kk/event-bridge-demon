@@ -1,10 +1,25 @@
 'use strict';
 const AWS = require('aws-sdk');
+const { v4: uuidv4 } = require('uuid');
+
 const EventBridge = new AWS.EventBridge();
+const documentClient = new AWS.DynamoDB.DocumentClient()
 
 module.exports.customerSupport = (event, context, callback) => {
   console.log('New customer support request received.');
   console.log(event.body);
+
+  const timestamp = new Date().toISOString()
+  const aggregator = uuidv4()
+
+  const eventStoreParams =  {
+    TableName: "EventStore",
+    Item: {
+      payload: event.body,
+      id: aggregator,
+      createdAt: timestamp,
+    },
+  }
 
   const params = {
     Entries: [{
@@ -16,6 +31,14 @@ module.exports.customerSupport = (event, context, callback) => {
     }]
   }
   console.log("Sending event to event bus...");
+
+  documentClient.put(eventStoreParams, (err, data) => {
+     if(err) {
+      console.error('fail to save event to db',err);
+     } else {
+      console.log('save event to db:', event.body)
+     }
+  })
 
   EventBridge.putEvents(params, (err, data) => {
     let response = null;
