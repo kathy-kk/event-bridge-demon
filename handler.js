@@ -12,12 +12,15 @@ module.exports.customerSupport = (event, context, callback) => {
   const timestamp = new Date().toISOString()
   const aggregator = uuidv4()
 
+  const eventBody = JSON.parse(event.body)
+
   const eventStoreParams =  {
     TableName: "EventStore",
     Item: {
       payload: event.body,
       id: aggregator,
       createdAt: timestamp,
+      type: eventBody && eventBody.type?eventBody.type:''
     },
   }
 

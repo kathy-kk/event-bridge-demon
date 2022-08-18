@@ -52,7 +52,26 @@ functions:
     deadLetter:
       targetArn: 'arn:aws:sqs:ap-southeast-2:401214556774:deadLetterTest'
 
-        
+  EventNotificationService:
+    handler: EventNotificationService.handler
+    role: EventNotificationServiceRole
+    deadLetter:
+      targetArn: 'arn:aws:sqs:ap-southeast-2:401214556774:deadLetterTest'
+    events:
+      - stream:
+          type: dynamodb
+          arn:        
+            Fn::GetAtt: 
+              - EventStore  
+              - StreamArn
+          filterPatterns:
+            - dynamodb:
+                NewImage:
+                  type:
+                    S:
+                      - 'food'
+
+                    
 
 resources:
   Resources:
@@ -169,6 +188,42 @@ resources:
                   Action:
                     - "sqs:*"
                   Resource: "*"
+
+    EventNotificationServiceRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: eventNotificationPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource:
+                    - '*'
+                - Effect: Allow
+                  Action:
+                    - "sqs:*"
+                  Resource: "*"
+                - Effect: Allow
+                  Action:
+                   - "dynamodb:DescribeStream"
+                   - "dynamodb:GetRecords"
+                   - "dynamodb:GetShardIterator"
+                   - "dynamodb:ListStreams"
+
+                  Resource: "*"
     
     EventInvokeConfig:
       Type: AWS::Lambda::EventInvokeConfig
@@ -213,6 +268,8 @@ resources:
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
+        StreamSpecification:
+          StreamViewType: NEW_IMAGE
 
     CustomerSupportServiceRole:
       Type: AWS::IAM::Role
